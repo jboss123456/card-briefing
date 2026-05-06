@@ -1,3 +1,4 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 from twilio.rest import Client
@@ -6,8 +7,8 @@ import time
 import re
 
 # ─── TWILIO CONFIG ────────────────────────────────────────────────────────────
-ACCOUNT_SID  = "YOUR_ACCOUNT_SID_HERE"       # Paste your Account SID here
-AUTH_TOKEN   = "YOUR_AUTH_TOKEN_HERE"         # Paste your Auth Token here
+ACCOUNT_SID  = "TWILIO_ACCOUNT_SID"       # Paste your Account SID here
+AUTH_TOKEN   = "TWILIO_AUTH_TOKEN"        # Paste your Auth Token here
 SANDBOX_FROM = "whatsapp:+14155238886"        # Twilio sandbox number (don't change)
 MY_WHATSAPP  = "whatsapp:+15148339119"        # Your WhatsApp number
 # ─────────────────────────────────────────────────────────────────────────────
