@@ -1,0 +1,26 @@
+name: Daily Card Briefing
+
+on:
+  schedule:
+    - cron: '0 14 * * *'  # 9am EST (UTC-5)
+  workflow_dispatch:        # allows manual trigger
+
+jobs:
+  send-briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 twilio
+
+      - name: Run briefing script
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+        run: python main.py
