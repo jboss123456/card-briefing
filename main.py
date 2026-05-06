@@ -7,8 +7,8 @@ import time
 import re
 
 # ─── TWILIO CONFIG ────────────────────────────────────────────────────────────
-ACCOUNT_SID  = "TWILIO_ACCOUNT_SID"       # Paste your Account SID here
-AUTH_TOKEN   = "TWILIO_AUTH_TOKEN"        # Paste your Auth Token here
+ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+AUTH_TOKEN  = os.environ.get('TWILIO_AUTH_TOKEN')
 SANDBOX_FROM = "whatsapp:+14155238886"        # Twilio sandbox number (don't change)
 MY_WHATSAPP  = "whatsapp:+15148339119"        # Your WhatsApp number
 # ─────────────────────────────────────────────────────────────────────────────
