@@ -55,10 +55,11 @@ def get_ebay_token():
 
 
 def get_sold_listings(query, token, days=30):
-        time.sleep(2)
+    time.sleep(2)
     resp = requests.get(
         "https://svcs.ebay.com/services/search/FindingService/v1",
         headers={
+
             "X-EBAY-SOA-OPERATION-NAME": "findCompletedItems",
             "X-EBAY-SOA-SERVICE-VERSION": "1.0.0",
             "X-EBAY-SOA-GLOBAL-ID": "EBAY-US",
