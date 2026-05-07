@@ -55,6 +55,7 @@ def get_ebay_token():
 
 
 def get_sold_listings(query, token, days=30):
+        time.sleep(2)
     resp = requests.get(
         "https://svcs.ebay.com/services/search/FindingService/v1",
         headers={
@@ -89,7 +90,7 @@ def get_sold_listings(query, token, days=30):
             results.append((amount, date_fmt, f"${amount:.0f}"))
         except (KeyError, IndexError, ValueError):
             continue
-    time.sleep(0.5)
+    time.sleep(2)
     return results
 def calc_avg(sales):
     if not sales:
