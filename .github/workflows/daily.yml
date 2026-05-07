@@ -23,4 +23,6 @@ jobs:
         env:
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
         run: python main.py
