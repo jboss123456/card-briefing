@@ -1,101 +1,128 @@
 import os
+import re
+import time
+import base64
 import requests
 from bs4 import BeautifulSoup
 from twilio.rest import Client
 from datetime import datetime, timedelta
-import time
-import re
 
 # ─── TWILIO CONFIG ────────────────────────────────────────────────────────────
-ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-AUTH_TOKEN  = os.environ.get('TWILIO_AUTH_TOKEN')
-SANDBOX_FROM = "whatsapp:+14155238886"        # Twilio sandbox number (don't change)
-MY_WHATSAPP  = "whatsapp:+15148339119"        # Your WhatsApp number
-# ─────────────────────────────────────────────────────────────────────────────
+ACCOUNT_SID  = os.environ.get("TWILIO_ACCOUNT_SID")
+AUTH_TOKEN   = os.environ.get("TWILIO_AUTH_TOKEN")
+SANDBOX_FROM = "whatsapp:+14155238886"
+MY_WHATSAPP  = "whatsapp:+15148339119"
+
+# ─── EBAY CONFIG ──────────────────────────────────────────────────────────────
+EBAY_APP_ID  = os.environ.get("EBAY_APP_ID")
+EBAY_CERT_ID = os.environ.get("EBAY_CERT_ID")
 
 # ─── MY CARDS ─────────────────────────────────────────────────────────────────
 MY_CARDS = {
-    "Luffy OP13-118 CGC Pristine 10":    "luffy+op13-118+CGC+pristine+10",
-    "Deoxys VSTAR GG46 CGC Pristine 10": "deoxys+vstar+GG46+CGC+pristine+10",
+    "Luffy OP13-118 CGC Pristine 10":    "luffy op13-118 CGC pristine 10",
+    "Deoxys VSTAR GG46 CGC Pristine 10": "deoxys vstar GG46 CGC pristine 10",
 }
 
 # ─── ONE PIECE WATCHLIST ──────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
-    "Zoro OP13-119 CGC 10":        "zoro+op13-119+CGC+10",
-    "Sanji OP13-117 CGC 10":       "sanji+op13-117+CGC+10",
-    "Nami OP13-116 CGC 10":        "nami+op13-116+CGC+10",
-    "Gol D Roger OP13-118 CGC 10": "gol+d+roger+op13-118+CGC+10",
+    "Zoro OP13-119 CGC 10":        "zoro op13-119 CGC 10",
+    "Sanji OP13-117 CGC 10":       "sanji op13-117 CGC 10",
+    "Nami OP13-116 CGC 10":        "nami op13-116 CGC 10",
+    "Gol D Roger OP13-118 CGC 10": "gol d roger op13-118 CGC 10",
 }
 
 # ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────
 POKEMON_WATCHLIST = {
-    "Charizard ex 199 PSA 10":      "charizard+ex+199+PSA+10",
-    "Umbreon VMAX Alt Art PSA 10":  "umbreon+vmax+alt+art+PSA+10",
-    "Pikachu VMAX Rainbow PSA 10":  "pikachu+vmax+rainbow+PSA+10",
-    "Rayquaza VMAX Alt Art PSA 10": "rayquaza+vmax+alt+art+PSA+10",
+    "Charizard ex 199 PSA 10":      "charizard ex 199 PSA 10",
+    "Umbreon VMAX Alt Art PSA 10":  "umbreon vmax alt art PSA 10",
+    "Pikachu VMAX Rainbow PSA 10":  "pikachu vmax rainbow PSA 10",
+    "Rayquaza VMAX Alt Art PSA 10": "rayquaza vmax alt art PSA 10",
 }
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-}
+# ─── EBAY API ─────────────────────────────────────────────────────────────────
 
-def scrape_ebay_sold(search_query):
-    url = (
-        f"https://www.ebay.com/sch/i.html?_nkw={search_query}"
-        f"&LH_Sold=1&LH_Complete=1&_sop=13"
+def get_ebay_token():
+    credentials = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()).decode()
+    resp = requests.post(
+        "https://api.ebay.com/identity/v1/oauth2/token",
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        data="grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope"
     )
+    return resp.json().get("access_token")
+
+
+def get_sold_listings(query, token, days=30):
+    filter_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    resp = requests.get(
+        "https://api.ebay.com/buy/browse/v1/item_summary/search",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"
+        },
+        params={
+            "q": query,
+            "filter": f"buyingOptions:{{AUCTION|FIXED_PRICE}},soldDate:[{filter_date}]",
+            "sort": "newlyListed",
+            "limit": 10
+        }
+    )
+    items = resp.json().get("itemSummaries", [])
     results = []
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        items = soup.select(".s-item__info")
-        for item in items:
-            price_tag = item.select_one(".s-item__price")
-            date_tag  = item.select_one(".s-item__ended-date, .s-item__listingDate")
-            if price_tag:
-                raw = price_tag.get_text(strip=True)
-                match = re.search(r"\$[\d,]+\.?\d*", raw)
-                if match:
-                    price_str = match.group(0)
-                    price_val = float(price_str.replace("$", "").replace(",", ""))
-                    date_str  = date_tag.get_text(strip=True) if date_tag else "N/A"
-                    results.append((price_val, date_str, price_str))
-        time.sleep(1.5)
-    except Exception as e:
-        print(f"Scrape error: {e}")
+    for item in items:
+        price = item.get("price", {})
+        amount = price.get("value")
+        currency = price.get("currency", "USD")
+        date = item.get("itemEndDate", item.get("itemCreationDate", "N/A"))
+        if amount:
+            date_fmt = date[:10] if date != "N/A" else "N/A"
+            results.append((float(amount), date_fmt, f"${float(amount):.0f}"))
+    time.sleep(0.5)
     return results
+
 
 def calc_avg(sales):
     if not sales:
         return None
     return sum(p for p, d, ps in sales) / len(sales)
 
-def build_my_cards_section():
+
+# ─── SECTION BUILDERS ─────────────────────────────────────────────────────────
+
+def build_my_cards_section(token):
     lines = ["━━━━━━━━━━━━━━━", "💎 MY CARDS", "━━━━━━━━━━━━━━━"]
     for name, query in MY_CARDS.items():
-        recent = scrape_ebay_sold(query)[:10]
+        recent = get_sold_listings(query, token, 30)
+        prior  = get_sold_listings(query, token, 60)
+        prior  = [s for s in prior if s not in recent]
         lines.append(f"\n{name}")
         if not recent:
             lines.append("  No recent sales found")
             continue
-        avg = calc_avg(recent)
-        if avg:
-            lines.append(f"30-day avg: ${avg:.0f}")
+        avg_recent = calc_avg(recent)
+        avg_prior  = calc_avg(prior)
+        if avg_recent:
+            lines.append(f"30-day avg: ${avg_recent:.0f}")
+        if avg_recent and avg_prior and avg_prior > 0:
+            pct = ((avg_recent - avg_prior) / avg_prior) * 100
+            arrow = "▲" if pct >= 0 else "▼"
+            lines.append(f"vs prior:   {arrow} {abs(pct):.1f}%")
         for price_val, date_str, price_str in recent[:5]:
             lines.append(f"  • {price_str} — {date_str}")
         if len(recent) < 3:
             lines.append(f"  ⚠ Low volume — {len(recent)} sale(s) found")
     return "\n".join(lines)
 
-def build_watchlist_section(title, emoji, watchlist):
+
+def build_watchlist_section(title, emoji, watchlist, token):
     lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title}", "━━━━━━━━━━━━━━━"]
     for name, query in watchlist.items():
-        recent = scrape_ebay_sold(query)[:10]
-        prior  = scrape_ebay_sold(query + "+2024")[:10]
+        recent = get_sold_listings(query, token, 30)
+        prior  = get_sold_listings(query, token, 60)
+        prior  = [s for s in prior if s not in recent]
         avg_recent = calc_avg(recent)
         avg_prior  = calc_avg(prior)
         pct = None
@@ -125,7 +152,8 @@ def build_watchlist_section(title, emoji, watchlist):
             lines.append(f"  Low volume — {len(recent)} sale(s) found")
     return "\n".join(lines)
 
-def build_hype_radar_section(title, emoji, subreddit, watchlist):
+
+def build_hype_radar_section(title, emoji, subreddit, watchlist, token):
     lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} HYPE RADAR — {title}", "━━━━━━━━━━━━━━━"]
     reddit_mentions = {}
     try:
@@ -151,10 +179,11 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist):
         mentions = reddit_mentions.get(name, 0)
         if mentions < 3:
             continue
-        recent_sales = scrape_ebay_sold(query)[:7]
-        prior_sales  = scrape_ebay_sold(query)[:14]
+        recent_sales = get_sold_listings(query, token, 7)
+        prior_sales  = get_sold_listings(query, token, 14)
+        prior_sales  = [s for s in prior_sales if s not in recent_sales]
         recent_count = len(recent_sales)
-        prior_count  = max(len(prior_sales) - recent_count, 1)
+        prior_count  = max(len(prior_sales), 1)
         volume_pct   = ((recent_count - prior_count) / prior_count) * 100
         if volume_pct >= 50:
             hype_cards.append((name, mentions, volume_pct, recent_sales))
@@ -169,16 +198,24 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist):
                 lines.append(f"  • {price_str} — {date_str}")
     return "\n".join(lines)
 
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
+
 def build_message():
     now_est = datetime.utcnow() - timedelta(hours=5)
     today   = now_est.strftime("%a %b %-d")
     lines   = [f"📈 CARD BRIEFING — {today}"]
-    lines.append(build_my_cards_section())
-    lines.append(build_watchlist_section("ONE PIECE WATCHLIST", "🏴‍☠️", ONE_PIECE_WATCHLIST))
-    lines.append(build_watchlist_section("POKEMON WATCHLIST", "⚡", POKEMON_WATCHLIST))
-    lines.append(build_hype_radar_section("ONE PIECE", "🔥", "OnePieceTCG", ONE_PIECE_WATCHLIST))
-    lines.append(build_hype_radar_section("POKEMON", "🔥", "PokemonTCG", POKEMON_WATCHLIST))
+    try:
+        token = get_ebay_token()
+    except Exception as e:
+        return f"📈 CARD BRIEFING — {today}\n\nFailed to get eBay token: {e}"
+    lines.append(build_my_cards_section(token))
+    lines.append(build_watchlist_section("ONE PIECE WATCHLIST", "🏴‍☠️", ONE_PIECE_WATCHLIST, token))
+    lines.append(build_watchlist_section("POKEMON WATCHLIST", "⚡", POKEMON_WATCHLIST, token))
+    lines.append(build_hype_radar_section("ONE PIECE", "🔥", "OnePieceTCG", ONE_PIECE_WATCHLIST, token))
+    lines.append(build_hype_radar_section("POKEMON", "🔥", "PokemonTCG", POKEMON_WATCHLIST, token))
     return "\n".join(lines)
+
 
 def send_whatsapp(body):
     client = Client(ACCOUNT_SID, AUTH_TOKEN)
@@ -188,6 +225,7 @@ def send_whatsapp(body):
         to=MY_WHATSAPP,
     )
     print(f"Sent! SID: {message.sid}")
+
 
 if __name__ == "__main__":
     print("Building message...")
