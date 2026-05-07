@@ -74,6 +74,7 @@ def get_sold_listings(query, token, days=30):
             "paginationInput.entriesPerPage": "10"
         }
     )
+    print(resp.status_code, resp.text[:500])
     try:
         search_result = resp.json().get("findCompletedItemsResponse", [{}])[0]
         items = search_result.get("searchResult", [{}])[0].get("item", [])
