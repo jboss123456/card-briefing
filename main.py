@@ -19,24 +19,24 @@ EBAY_CERT_ID = os.environ.get("EBAY_CERT_ID")
 
 # ─── MY CARDS ─────────────────────────────────────────────────────────────────
 MY_CARDS = {
-    "Luffy OP13-118 CGC Pristine 10":    "luffy op13-118 CGC pristine 10",
-    "Deoxys VSTAR GG46 CGC Pristine 10": "deoxys vstar GG46 CGC pristine 10",
+    "Luffy OP13-118 CGC Pristine 10":    "(Luffy, 118, OP13-118) CGC (10, Pristine)",
+    "Deoxys VSTAR GG46 CGC Pristine 10": "(Deoxys, GG46) CGC (10, Pristine)",
 }
 
 # ─── ONE PIECE WATCHLIST ──────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
-    "Zoro OP13-119 CGC 10":        "zoro op13-119 CGC 10",
-    "Sanji OP13-117 CGC 10":       "sanji op13-117 CGC 10",
-    "Nami OP13-116 CGC 10":        "nami op13-116 CGC 10",
-    "Gol D Roger OP13-118 CGC 10": "gol d roger op13-118 CGC 10",
+    "Zoro OP13-119 CGC 10":        "(Zoro, 119, OP13-119) CGC 10",
+    "Sanji OP13-117 CGC 10":       "(Sanji, 117, OP13-117) CGC 10",
+    "Nami OP13-116 CGC 10":        "(Nami, 116, OP13-116) CGC 10",
+    "Gol D Roger OP13-118 CGC 10": "(Roger, 118, OP13-118) CGC 10",
 }
 
 # ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────
 POKEMON_WATCHLIST = {
-    "Charizard ex 199 PSA 10":      "charizard ex 199 PSA 10",
-    "Umbreon VMAX Alt Art PSA 10":  "umbreon vmax alt art PSA 10",
-    "Pikachu VMAX Rainbow PSA 10":  "pikachu vmax rainbow PSA 10",
-    "Rayquaza VMAX Alt Art PSA 10": "rayquaza vmax alt art PSA 10",
+    "Charizard ex 199 PSA 10":      "(Charizard, 199) PSA 10",
+    "Umbreon VMAX Alt Art PSA 10":  "(Umbreon, 215) PSA 10",
+    "Pikachu VMAX Rainbow PSA 10":  "(Pikachu, 188) PSA 10",
+    "Rayquaza VMAX Alt Art PSA 10": "(Rayquaza, 218) PSA 10",
 }
 
 # ─── EBAY API ─────────────────────────────────────────────────────────────────
