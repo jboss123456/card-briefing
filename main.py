@@ -55,35 +55,41 @@ def get_ebay_token():
 
 
 def get_sold_listings(query, token, days=30):
-    filter_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     resp = requests.get(
-        "https://api.ebay.com/buy/browse/v1/item_summary/search",
+        "https://svcs.ebay.com/services/search/FindingService/v1",
         headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"
+            "X-EBAY-SOA-OPERATION-NAME": "findCompletedItems",
+            "X-EBAY-SOA-SERVICE-VERSION": "1.0.0",
+            "X-EBAY-SOA-GLOBAL-ID": "EBAY-US",
+            "X-EBAY-SOA-SECURITY-APPNAME": os.environ.get("EBAY_APP_ID", ""),
+            "X-EBAY-SOA-RESPONSE-DATA-FORMAT": "JSON"
         },
         params={
-            "q": query,
-            "filter": f"buyingOptions:{{AUCTION|FIXED_PRICE}},soldDate:[{filter_date}]",
-            "sort": "newlyListed",
-            "limit": 10
+            "keywords": query,
+            "itemFilter(0).name": "SoldItemsOnly",
+            "itemFilter(0).value": "true",
+            "itemFilter(1).name": "DaysNumberOfDays",
+            "itemFilter(1).value": str(days),
+            "sortOrder": "EndTimeSoonest",
+            "paginationInput.entriesPerPage": "10"
         }
     )
-    items = resp.json().get("itemSummaries", [])
+    try:
+        search_result = resp.json().get("findCompletedItemsResponse", [{}])[0]
+        items = search_result.get("searchResult", [{}])[0].get("item", [])
+    except (ValueError, IndexError, KeyError):
+        return []
     results = []
     for item in items:
-        price = item.get("price", {})
-        amount = price.get("value")
-        currency = price.get("currency", "USD")
-        date = item.get("itemEndDate", item.get("itemCreationDate", "N/A"))
-        if amount:
+        try:
+            amount = float(item["sellingStatus"][0]["currentPrice"][0]["__value__"])
+            date = item.get("listingInfo", [{}])[0].get("endTime", ["N/A"])[0]
             date_fmt = date[:10] if date != "N/A" else "N/A"
-            results.append((float(amount), date_fmt, f"${float(amount):.0f}"))
+            results.append((amount, date_fmt, f"${amount:.0f}"))
+        except (KeyError, IndexError, ValueError):
+            continue
     time.sleep(0.5)
     return results
-
-
 def calc_avg(sales):
     if not sales:
         return None
