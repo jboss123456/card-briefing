@@ -1,28 +1,22 @@
 import os
-import re
 import time
-import base64
 import requests
 from twilio.rest import Client
 from datetime import datetime, timedelta
 
-# ─── TWILIO CONFIG ────────────────────────────────────────────────────────────
+# ─── TWILIO CONFIG ────────────────────────────────────────────────────────────────────────────────────
 ACCOUNT_SID  = os.environ.get("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN   = os.environ.get("TWILIO_AUTH_TOKEN")
 SANDBOX_FROM = "whatsapp:+14155238886"
 MY_WHATSAPP  = "whatsapp:+15148339119"
 
-# ─── EBAY CONFIG ──────────────────────────────────────────────────────────────
-EBAY_APP_ID  = os.environ.get("EBAY_APP_ID")
-EBAY_CERT_ID = os.environ.get("EBAY_CERT_ID")
-
-# ─── MY CARDS ─────────────────────────────────────────────────────────────────
+# ─── MY CARDS ─────────────────────────────────────────────────────────────────────────────────────────
 MY_CARDS = {
-    "Luffy OP13-118 CGC Pristine 10": "Luffy OP13-118 CGC 10",
-    "Deoxys VSTAR GG46 CGC Pristine 10": "Deoxys VSTAR GG46 CGC 10",
+    "Luffy OP13-118 CGC Pristine 10": "One Piece Luffy OP13-118 CGC Pristine 10",
+    "Deoxys VSTAR GG46 CGC Pristine 10": "Deoxys VSTAR GG46 CGC Pristine 10",
 }
 
-# ─── ONE PIECE WATCHLIST ──────────────────────────────────────────────────────
+# ─── ONE PIECE WATCHLIST ────────────────────────────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
     "Zoro OP13-119 CGC 10": "Zoro OP13-119 CGC 10",
     "Sanji OP13-117 CGC 10": "Sanji OP13-117 CGC 10",
@@ -30,114 +24,85 @@ ONE_PIECE_WATCHLIST = {
     "Gol D Roger OP13-118 CGC 10": "Gol D Roger OP13-118 CGC 10",
 }
 
-# ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────
+# ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────────────────────────────────
 POKEMON_WATCHLIST = {
-    "Charizard ex 199 PSA 10": "Charizard 199 PSA 10",
+    "Charizard ex 199 PSA 10": "Charizard ex 199 PSA 10",
     "Umbreon VMAX Alt Art PSA 10": "Umbreon VMAX Alt Art PSA 10",
     "Pikachu VMAX Rainbow PSA 10": "Pikachu VMAX Rainbow PSA 10",
     "Rayquaza VMAX Alt Art PSA 10": "Rayquaza VMAX Alt Art PSA 10",
     "API TEST": "Pikachu PSA 10",
 }
 
-# ─── EBAY API ─────────────────────────────────────────────────────────────────
-
-def get_ebay_token():
-    credentials = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()).decode()
-    resp = requests.post(
-        "https://api.ebay.com/identity/v1/oauth2/token",
-        headers={
-            "Authorization": f"Basic {credentials}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        data="grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope"
-    )
-    return resp.json().get("access_token")
-
-
-def get_sold_listings(query, token, days=90):
-    time.sleep(2)
-    resp = requests.get(
-        "https://svcs.ebay.com/services/search/FindingService/v1",
-        headers={
-            "X-EBAY-SOA-OPERATION-NAME": "findCompletedItems",
-            "X-EBAY-SOA-SERVICE-VERSION": "1.0.0",
-            "X-EBAY-SOA-GLOBAL-ID": "EBAY-US",
-            "X-EBAY-SOA-SECURITY-APPNAME": os.environ.get("EBAY_APP_ID", ""),
-            "X-EBAY-SOA-RESPONSE-DATA-FORMAT": "JSON"
-        },
-        params={
-            "keywords": query,
-            "itemFilter(0).name": "SoldItemsOnly",
-            "itemFilter(0).value": "true",
-            "itemFilter(1).name": "DaysNumberOfDays",
-            "itemFilter(1).value": str(days),
-            "sortOrder": "EndTimeSoonest",
-            "paginationInput.entriesPerPage": "10"
-        }
-    )
-    print(f"eBay [{query}]: {resp.status_code} {resp.text[:300]}")
+# ─── PRICECHARTING API ────────────────────────────────────────────────────────────────────────────────────
+def get_pricecharting_price(query):
     try:
-        search_result = resp.json().get("findCompletedItemsResponse", [{}])[0]
-        items = search_result.get("searchResult", [{}])[0].get("item", [])
-    except (ValueError, IndexError, KeyError):
-        return []
-    results = []
-    for item in items:
-        try:
-            amount = float(item["sellingStatus"][0]["currentPrice"][0]["__value__"])
-            date = item.get("listingInfo", [{}])[0].get("endTime", ["N/A"])[0]
-            date_fmt = date[:10] if date != "N/A" else "N/A"
-            results.append((amount, date_fmt, f"${amount:.0f}"))
-        except (KeyError, IndexError, ValueError):
-            continue
-    time.sleep(2)
-    return results
-
-
-def calc_avg(sales):
-    if not sales:
+        url = "https://www.pricecharting.com/api/products"
+        params = {"q": query, "status": "price"}
+        resp = requests.get(url, params=params, timeout=10)
+        print(f"PriceCharting [{query}]: {resp.status_code} {resp.text[:300]}")
+        data = resp.json()
+        products = data.get("products", [])
+        if not products:
+            return None
+        product = products[0]
+        # graded prices in cents
+        psa10 = product.get("graded-price-10")
+        cib   = product.get("cib-price")
+        price = psa10 or cib
+        if price:
+            return round(float(price) / 100, 2)
         return None
-    return sum(p for p, d, ps in sales) / len(sales)
+    except Exception as e:
+        print(f"PriceCharting error: {e}")
+        return None
 
+def get_pricecharting_history(query):
+    try:
+        url = "https://www.pricecharting.com/api/products"
+        params = {"q": query, "status": "price"}
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+        products = data.get("products", [])
+        if not products:
+            return None, None, None
+        product = products[0]
+        psa10       = product.get("graded-price-10")
+        psa9        = product.get("graded-price-9")
+        loose       = product.get("loose-price")
+        current     = round(float(psa10) / 100, 2) if psa10 else None
+        month_ago   = round(float(psa9) / 100, 2) if psa9 else None
+        return current, month_ago, product.get("name", query)
+    except Exception as e:
+        print(f"PriceCharting history error: {e}")
+        return None, None, None
 
-# ─── SECTION BUILDERS ─────────────────────────────────────────────────────────
+def calc_pct(current, prior):
+    if current and prior and prior > 0:
+        return ((current - prior) / prior) * 100
+    return None
 
-def build_my_cards_section(token):
+# ─── SECTION BUILDERS ───────────────────────────────────────────────────────────────────────────────────────
+def build_my_cards_section():
     lines = ["━━━━━━━━━━━━━━━", "💎 MY CARDS", "━━━━━━━━━━━━━━━"]
     for name, query in MY_CARDS.items():
-        recent = get_sold_listings(query, token, 90)
-        prior = get_sold_listings(query, token, 180)
-        prior = [s for s in prior if s not in recent]
+        current, prior, product_name = get_pricecharting_history(query)
         lines.append(f"\n{name}")
-        if not recent:
-            lines.append("  No recent sales found")
+        if not current:
+            lines.append("  No price data found")
             continue
-        avg_recent = calc_avg(recent)
-        avg_prior = calc_avg(prior)
-        if avg_recent:
-            lines.append(f"90-day avg: ${avg_recent:.0f}")
-        if avg_recent and avg_prior and avg_prior > 0:
-            pct = ((avg_recent - avg_prior) / avg_prior) * 100
+        lines.append(f"Current: ${current:.0f}")
+        pct = calc_pct(current, prior)
+        if pct is not None:
             arrow = "▲" if pct >= 0 else "▼"
-            lines.append(f"vs prior:   {arrow} {abs(pct):.1f}%")
-        for price_val, date_str, price_str in recent[:5]:
-            lines.append(f"  • {price_str} — {date_str}")
-        if len(recent) < 3:
-            lines.append(f"  ⚠ Low volume — {len(recent)} sale(s) found")
+            lines.append(f"vs prior grade: {arrow} {abs(pct):.1f}%")
+        time.sleep(0.5)
     return "\n".join(lines)
 
-
-def build_watchlist_section(title, emoji, watchlist, token):
+def build_watchlist_section(title, emoji, watchlist):
     lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title}", "━━━━━━━━━━━━━━━"]
     for name, query in watchlist.items():
-        recent = get_sold_listings(query, token, 90)
-        prior = get_sold_listings(query, token, 180)
-        prior = [s for s in prior if s not in recent]
-        avg_recent = calc_avg(recent)
-        avg_prior = calc_avg(prior)
-        pct = None
-        if avg_recent and avg_prior and avg_prior > 0:
-            pct = ((avg_recent - avg_prior) / avg_prior) * 100
+        current, prior, product_name = get_pricecharting_history(query)
+        pct = calc_pct(current, prior)
         flag = ""
         if pct is not None:
             if pct >= 15:
@@ -145,25 +110,17 @@ def build_watchlist_section(title, emoji, watchlist, token):
             elif pct <= -15:
                 flag = " ⚠️"
         lines.append(f"\n{name}{flag}")
-        if not recent:
-            lines.append("  No recent sales found")
+        if not current:
+            lines.append("  No price data found")
             continue
-        latest_price, latest_date, latest_str = recent[0]
-        lines.append(f"Latest: {latest_str} — {latest_date}")
-        if avg_recent:
-            if pct is not None:
-                arrow = "▲" if pct >= 0 else "▼"
-                lines.append(f"90-day avg: ${avg_recent:.0f} | {arrow} {abs(pct):.1f}%")
-            else:
-                lines.append(f"90-day avg: ${avg_recent:.0f}")
-        for price_val, date_str, price_str in recent[1:4]:
-            lines.append(f"  • {price_str} — {date_str}")
-        if len(recent) < 3:
-            lines.append(f"  Low volume — {len(recent)} sale(s) found")
+        lines.append(f"Latest: ${current:.0f}")
+        if pct is not None:
+            arrow = "▲" if pct >= 0 else "▼"
+            lines.append(f"vs prior: {arrow} {abs(pct):.1f}%")
+        time.sleep(0.5)
     return "\n".join(lines)
 
-
-def build_hype_radar_section(title, emoji, subreddit, watchlist, token):
+def build_hype_radar_section(title, emoji, subreddit, watchlist):
     lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} HYPE RADAR — {title}", "━━━━━━━━━━━━━━━"]
     reddit_mentions = {}
     try:
@@ -184,48 +141,39 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist, token):
         time.sleep(1)
     except Exception as e:
         lines.append(f"Reddit fetch error: {e}")
+
     hype_cards = []
     for name, query in watchlist.items():
         mentions = reddit_mentions.get(name, 0)
-        if mentions < 3:
-            continue
-        recent_sales = get_sold_listings(query, token, 7)
-        prior_sales = get_sold_listings(query, token, 14)
-        prior_sales = [s for s in prior_sales if s not in recent_sales]
-        recent_count = len(recent_sales)
-        prior_count = max(len(prior_sales), 1)
-        volume_pct = ((recent_count - prior_count) / prior_count) * 100
-        if volume_pct >= 50:
-            hype_cards.append((name, mentions, volume_pct, recent_sales))
+        if mentions >= 3:
+            current, prior, _ = get_pricecharting_history(query)
+            pct = calc_pct(current, prior)
+            if pct and pct >= 15:
+                hype_cards.append((name, mentions, pct, current))
+
     if not hype_cards:
         lines.append("No hype signals today.")
     else:
-        for name, mentions, vol_pct, recent_sales in hype_cards:
+        for name, mentions, pct, current in hype_cards:
             lines.append(f"\n{name}")
             lines.append(f"Reddit mentions (24hr): {mentions}")
-            lines.append(f"eBay volume spike: +{vol_pct:.0f}%")
-            for price_val, date_str, price_str in recent_sales[:3]:
-                lines.append(f"  • {price_str} — {date_str}")
+            lines.append(f"Price change: +{pct:.1f}%")
+            if current:
+                lines.append(f"Current: ${current:.0f}")
+
     return "\n".join(lines)
 
-
-# ─── MAIN ─────────────────────────────────────────────────────────────────────
-
+# ─── MAIN ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def build_message():
     now_est = datetime.utcnow() - timedelta(hours=5)
     today = now_est.strftime("%a %b %-d")
     lines = [f"📈 CARD BRIEFING — {today}"]
-    try:
-        token = get_ebay_token()
-    except Exception as e:
-        return f"📈 CARD BRIEFING — {today}\n\nFailed to get eBay token: {e}"
-    lines.append(build_my_cards_section(token))
-    lines.append(build_watchlist_section("ONE PIECE WATCHLIST", "🏴‍☠️", ONE_PIECE_WATCHLIST, token))
-    lines.append(build_watchlist_section("POKEMON WATCHLIST", "⚡", POKEMON_WATCHLIST, token))
-    lines.append(build_hype_radar_section("ONE PIECE", "🔥", "OnePieceTCG", ONE_PIECE_WATCHLIST, token))
-    lines.append(build_hype_radar_section("POKEMON", "🔥", "PokemonTCG", POKEMON_WATCHLIST, token))
+    lines.append(build_my_cards_section())
+    lines.append(build_watchlist_section("ONE PIECE WATCHLIST", "🏴‍☠️", ONE_PIECE_WATCHLIST))
+    lines.append(build_watchlist_section("POKEMON WATCHLIST", "⚡", POKEMON_WATCHLIST))
+    lines.append(build_hype_radar_section("ONE PIECE", "🔥", "OnePieceTCG", ONE_PIECE_WATCHLIST))
+    lines.append(build_hype_radar_section("POKEMON", "🔥", "PokemonTCG", POKEMON_WATCHLIST))
     return "\n".join(lines)
-
 
 def send_whatsapp(body):
     client = Client(ACCOUNT_SID, AUTH_TOKEN)
@@ -235,7 +183,6 @@ def send_whatsapp(body):
         to=MY_WHATSAPP,
     )
     print(f"Sent! SID: {message.sid}")
-
 
 if __name__ == "__main__":
     print("Building message...")
