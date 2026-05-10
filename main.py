@@ -3,7 +3,6 @@ import re
 import time
 import base64
 import requests
-from bs4 import BeautifulSoup
 from twilio.rest import Client
 from datetime import datetime, timedelta
 
@@ -19,24 +18,25 @@ EBAY_CERT_ID = os.environ.get("EBAY_CERT_ID")
 
 # ─── MY CARDS ─────────────────────────────────────────────────────────────────
 MY_CARDS = {
-    "Luffy OP13-118 CGC Pristine 10":    "(Luffy, 118, OP13-118) CGC (10, Pristine)",
-    "Deoxys VSTAR GG46 CGC Pristine 10": "(Deoxys, GG46) CGC (10, Pristine)",
+    "Luffy OP13-118 CGC Pristine 10": "Luffy OP13-118 CGC 10",
+    "Deoxys VSTAR GG46 CGC Pristine 10": "Deoxys VSTAR GG46 CGC 10",
 }
 
 # ─── ONE PIECE WATCHLIST ──────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
-    "Zoro OP13-119 CGC 10":        "(Zoro, 119, OP13-119) CGC 10",
-    "Sanji OP13-117 CGC 10":       "(Sanji, 117, OP13-117) CGC 10",
-    "Nami OP13-116 CGC 10":        "(Nami, 116, OP13-116) CGC 10",
-    "Gol D Roger OP13-118 CGC 10": "(Roger, 118, OP13-118) CGC 10",
+    "Zoro OP13-119 CGC 10": "Zoro OP13-119 CGC 10",
+    "Sanji OP13-117 CGC 10": "Sanji OP13-117 CGC 10",
+    "Nami OP13-116 CGC 10": "Nami OP13-116 CGC 10",
+    "Gol D Roger OP13-118 CGC 10": "Gol D Roger OP13-118 CGC 10",
 }
 
 # ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────
 POKEMON_WATCHLIST = {
-    "Charizard ex 199 PSA 10":      "(Charizard, 199) PSA 10",
-    "Umbreon VMAX Alt Art PSA 10":  "(Umbreon, 215) PSA 10",
-    "Pikachu VMAX Rainbow PSA 10":  "(Pikachu, 188) PSA 10",
-    "Rayquaza VMAX Alt Art PSA 10": "(Rayquaza, 218) PSA 10",
+    "Charizard ex 199 PSA 10": "Charizard 199 PSA 10",
+    "Umbreon VMAX Alt Art PSA 10": "Umbreon VMAX Alt Art PSA 10",
+    "Pikachu VMAX Rainbow PSA 10": "Pikachu VMAX Rainbow PSA 10",
+    "Rayquaza VMAX Alt Art PSA 10": "Rayquaza VMAX Alt Art PSA 10",
+    "API TEST": "Pikachu PSA 10",
 }
 
 # ─── EBAY API ─────────────────────────────────────────────────────────────────
@@ -54,12 +54,11 @@ def get_ebay_token():
     return resp.json().get("access_token")
 
 
-def get_sold_listings(query, token, days=30):
+def get_sold_listings(query, token, days=90):
     time.sleep(2)
     resp = requests.get(
         "https://svcs.ebay.com/services/search/FindingService/v1",
         headers={
-
             "X-EBAY-SOA-OPERATION-NAME": "findCompletedItems",
             "X-EBAY-SOA-SERVICE-VERSION": "1.0.0",
             "X-EBAY-SOA-GLOBAL-ID": "EBAY-US",
@@ -76,7 +75,7 @@ def get_sold_listings(query, token, days=30):
             "paginationInput.entriesPerPage": "10"
         }
     )
-    print(resp.status_code, resp.text[:500])
+    print(f"eBay [{query}]: {resp.status_code} {resp.text[:300]}")
     try:
         search_result = resp.json().get("findCompletedItemsResponse", [{}])[0]
         items = search_result.get("searchResult", [{}])[0].get("item", [])
@@ -93,6 +92,8 @@ def get_sold_listings(query, token, days=30):
             continue
     time.sleep(2)
     return results
+
+
 def calc_avg(sales):
     if not sales:
         return None
@@ -104,17 +105,17 @@ def calc_avg(sales):
 def build_my_cards_section(token):
     lines = ["━━━━━━━━━━━━━━━", "💎 MY CARDS", "━━━━━━━━━━━━━━━"]
     for name, query in MY_CARDS.items():
-        recent = get_sold_listings(query, token, 30)
-        prior  = get_sold_listings(query, token, 60)
-        prior  = [s for s in prior if s not in recent]
+        recent = get_sold_listings(query, token, 90)
+        prior = get_sold_listings(query, token, 180)
+        prior = [s for s in prior if s not in recent]
         lines.append(f"\n{name}")
         if not recent:
             lines.append("  No recent sales found")
             continue
         avg_recent = calc_avg(recent)
-        avg_prior  = calc_avg(prior)
+        avg_prior = calc_avg(prior)
         if avg_recent:
-            lines.append(f"30-day avg: ${avg_recent:.0f}")
+            lines.append(f"90-day avg: ${avg_recent:.0f}")
         if avg_recent and avg_prior and avg_prior > 0:
             pct = ((avg_recent - avg_prior) / avg_prior) * 100
             arrow = "▲" if pct >= 0 else "▼"
@@ -129,11 +130,11 @@ def build_my_cards_section(token):
 def build_watchlist_section(title, emoji, watchlist, token):
     lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title}", "━━━━━━━━━━━━━━━"]
     for name, query in watchlist.items():
-        recent = get_sold_listings(query, token, 30)
-        prior  = get_sold_listings(query, token, 60)
-        prior  = [s for s in prior if s not in recent]
+        recent = get_sold_listings(query, token, 90)
+        prior = get_sold_listings(query, token, 180)
+        prior = [s for s in prior if s not in recent]
         avg_recent = calc_avg(recent)
-        avg_prior  = calc_avg(prior)
+        avg_prior = calc_avg(prior)
         pct = None
         if avg_recent and avg_prior and avg_prior > 0:
             pct = ((avg_recent - avg_prior) / avg_prior) * 100
@@ -152,9 +153,9 @@ def build_watchlist_section(title, emoji, watchlist, token):
         if avg_recent:
             if pct is not None:
                 arrow = "▲" if pct >= 0 else "▼"
-                lines.append(f"30-day avg: ${avg_recent:.0f} | {arrow} {abs(pct):.1f}%")
+                lines.append(f"90-day avg: ${avg_recent:.0f} | {arrow} {abs(pct):.1f}%")
             else:
-                lines.append(f"30-day avg: ${avg_recent:.0f}")
+                lines.append(f"90-day avg: ${avg_recent:.0f}")
         for price_val, date_str, price_str in recent[1:4]:
             lines.append(f"  • {price_str} — {date_str}")
         if len(recent) < 3:
@@ -167,7 +168,7 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist, token):
     reddit_mentions = {}
     try:
         url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=50"
-        r = requests.get(url, headers={"User-Agent": "CardBriefingBot/1.0"}, timeout=10)
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         posts = r.json().get("data", {}).get("children", [])
         cutoff = datetime.utcnow() - timedelta(hours=24)
         for post in posts:
@@ -189,11 +190,11 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist, token):
         if mentions < 3:
             continue
         recent_sales = get_sold_listings(query, token, 7)
-        prior_sales  = get_sold_listings(query, token, 14)
-        prior_sales  = [s for s in prior_sales if s not in recent_sales]
+        prior_sales = get_sold_listings(query, token, 14)
+        prior_sales = [s for s in prior_sales if s not in recent_sales]
         recent_count = len(recent_sales)
-        prior_count  = max(len(prior_sales), 1)
-        volume_pct   = ((recent_count - prior_count) / prior_count) * 100
+        prior_count = max(len(prior_sales), 1)
+        volume_pct = ((recent_count - prior_count) / prior_count) * 100
         if volume_pct >= 50:
             hype_cards.append((name, mentions, volume_pct, recent_sales))
     if not hype_cards:
@@ -212,8 +213,8 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist, token):
 
 def build_message():
     now_est = datetime.utcnow() - timedelta(hours=5)
-    today   = now_est.strftime("%a %b %-d")
-    lines   = [f"📈 CARD BRIEFING — {today}"]
+    today = now_est.strftime("%a %b %-d")
+    lines = [f"📈 CARD BRIEFING — {today}"]
     try:
         token = get_ebay_token()
     except Exception as e:
