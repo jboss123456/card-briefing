@@ -3,130 +3,116 @@ import time
 import requests
 from twilio.rest import Client
 from datetime import datetime, timedelta
-SCRAPER_KEY = os.environ.get('SCRAPER_API_KEY')
 
-# ─── TWILIO CONFIG ────────────────────────────────────────────────────────────────────────────────────
+# ─── TWILIO CONFIG ──────────────────────────────────────────────────────────────────────────────
 ACCOUNT_SID  = os.environ.get("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN   = os.environ.get("TWILIO_AUTH_TOKEN")
 SANDBOX_FROM = "whatsapp:+14155238886"
 MY_WHATSAPP  = "whatsapp:+15148339119"
 
-# ─── MY CARDS ─────────────────────────────────────────────────────────────────────────────────────────
+# ─── TCG API CONFIG ─────────────────────────────────────────────────────────────────────────────
+TCG_API_KEY  = os.environ.get("TCG_API_KEY")
+TCG_BASE_URL = "https://api.tcgapi.dev/v1"
+
+# ─── MY CARDS ─────────────────────────────────────────────────────────────────────────────────────
 MY_CARDS = {
-    "Luffy OP13-118 CGC Pristine 10": "One Piece Luffy OP13-118 CGC Pristine 10",
-    "Deoxys VSTAR GG46 CGC Pristine 10": "Deoxys VSTAR GG46 CGC Pristine 10",
+    "Luffy OP13-118 CGC Pristine 10": {"name": "Luffy", "set": "OP13", "number": "118", "game": "one-piece"},
+    "Deoxys VSTAR GG46 CGC Pristine 10": {"name": "Deoxys VSTAR", "set": "GG46", "number": "GG46", "game": "pokemon"},
 }
 
-# ─── ONE PIECE WATCHLIST ────────────────────────────────────────────────────────────────────────────
+# ─── ONE PIECE WATCHLIST ────────────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
-    "Zoro OP13-119 CGC 10": "Zoro OP13-119 CGC 10",
-    "Sanji OP13-117 CGC 10": "Sanji OP13-117 CGC 10",
-    "Nami OP13-116 CGC 10": "Nami OP13-116 CGC 10",
-    "Gol D Roger OP13-118 CGC 10": "Gol D Roger OP13-118 CGC 10",
+    "Zoro OP13-119 CGC 10": {"name": "Zoro", "set": "OP13", "number": "119", "game": "one-piece"},
+    "Sanji OP13-117 CGC 10": {"name": "Sanji", "set": "OP13", "number": "117", "game": "one-piece"},
+    "Nami OP13-116 CGC 10": {"name": "Nami", "set": "OP13", "number": "116", "game": "one-piece"},
+    "Gol D Roger OP13-118 CGC 10": {"name": "Gol D Roger", "set": "OP13", "number": "118", "game": "one-piece"},
 }
 
-# ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────────────────────────────────
+# ─── POKEMON WATCHLIST ──────────────────────────────────────────────────────────────────
 POKEMON_WATCHLIST = {
-    "Charizard ex 199 PSA 10": "Charizard ex 199 PSA 10",
-    "Umbreon VMAX Alt Art PSA 10": "Umbreon VMAX Alt Art PSA 10",
-    "Pikachu VMAX Rainbow PSA 10": "Pikachu VMAX Rainbow PSA 10",
-    "Rayquaza VMAX Alt Art PSA 10": "Rayquaza VMAX Alt Art PSA 10",
-    "API TEST": "Pikachu PSA 10",
+    "Charizard ex 199 PSA 10": {"name": "Charizard ex", "number": "199", "game": "pokemon"},
+    "Umbreon VMAX Alt Art PSA 10": {"name": "Umbreon VMAX", "number": "215", "game": "pokemon"},
+    "Pikachu VMAX Rainbow PSA 10": {"name": "Pikachu VMAX", "number": "188", "game": "pokemon"},
+    "Rayquaza VMAX Alt Art PSA 10": {"name": "Rayquaza VMAX", "number": "218", "game": "pokemon"},
+    "API TEST": {"name": "Pikachu", "number": "1", "game": "pokemon"},
 }
 
-# ─── PRICECHARTING API ────────────────────────────────────────────────────────────────────────────────────
-def get_pricecharting_price(query):
+# ─── TCG API FUNCTIONS ─────────────────────────────────────────────────────────────────────────
+
+def get_card_price(card_info):
     try:
-        url = "https://www.pricecharting.com/api/products"
-        params = {"q": query, "status": "price"}
-        resp = requests.get(url, params=params, timeout=10)
-        print(f"PriceCharting [{query}]: {resp.status_code} {resp.text[:300]}")
+        headers = {"x-api-key": TCG_API_KEY}
+        params = {
+            "q": card_info["name"],
+            "game": card_info["game"],
+            "number": card_info.get("number", ""),
+        }
+        resp = requests.get(f"{TCG_BASE_URL}/cards", headers=headers, params=params, timeout=10)
+        print(f"TCG API [{card_info['name']}]: {resp.status_code} {resp.text[:300]}")
         data = resp.json()
-        products = data.get("products", [])
-        if not products:
-            return None
-        product = products[0]
-        # graded prices in cents
-        psa10 = product.get("graded-price-10")
-        cib   = product.get("cib-price")
-        price = psa10 or cib
-        if price:
-            return round(float(price) / 100, 2)
-        return None
+        cards = data.get("data", [])
+        if not cards:
+            return None, None
+        card = cards[0]
+        prices = card.get("prices", {})
+        market = prices.get("market") or prices.get("mid") or prices.get("low")
+        change_7d = card.get("price_change_7d") or card.get("priceChange7d")
+        return market, change_7d
     except Exception as e:
-        print(f"PriceCharting error: {e}")
-        return None
+        print(f"TCG API error [{card_info['name']}]: {e}")
+        return None, None
 
-def get_pricecharting_history(query):
-    try:
-        url = "https://www.pricecharting.com/api/products"
-        params = {"q": query, "status": "price"}
-        resp = requests.get(url, params=params, timeout=10)
-        data = resp.json()
-        products = data.get("products", [])
-        if not products:
-            return None, None, None
-        product = products[0]
-        psa10       = product.get("graded-price-10")
-        psa9        = product.get("graded-price-9")
-        loose       = product.get("loose-price")
-        current     = round(float(psa10) / 100, 2) if psa10 else None
-        month_ago   = round(float(psa9) / 100, 2) if psa9 else None
-        return current, month_ago, product.get("name", query)
-    except Exception as e:
-        print(f"PriceCharting history error: {e}")
-        return None, None, None
 
-def calc_pct(current, prior):
-    if current and prior and prior > 0:
-        return ((current - prior) / prior) * 100
-    return None
+def calc_pct(change_7d):
+    return change_7d if change_7d is not None else None
 
-# ─── SECTION BUILDERS ───────────────────────────────────────────────────────────────────────────────────────
+
+# ─── SECTION BUILDERS ─────────────────────────────────────────────────────────────────────────────
+
 def build_my_cards_section():
     lines = ["━━━━━━━━━━━━━━━", "💎 MY CARDS", "━━━━━━━━━━━━━━━"]
-    for name, query in MY_CARDS.items():
-        current, prior, product_name = get_pricecharting_history(query)
+    for name, info in MY_CARDS.items():
+        price, change = get_card_price(info)
         lines.append(f"\n{name}")
-        if not current:
+        if not price:
             lines.append("  No price data found")
             continue
-        lines.append(f"Current: ${current:.0f}")
-        pct = calc_pct(current, prior)
-        if pct is not None:
-            arrow = "▲" if pct >= 0 else "▼"
-            lines.append(f"vs prior grade: {arrow} {abs(pct):.1f}%")
+        lines.append(f"Market: ${price:.0f}")
+        if change is not None:
+            arrow = "▲" if change >= 0 else "▼"
+            lines.append(f"7d change: {arrow} {abs(change):.1f}%")
         time.sleep(0.5)
     return "\n".join(lines)
+
 
 def build_watchlist_section(title, emoji, watchlist):
     lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title}", "━━━━━━━━━━━━━━━"]
-    for name, query in watchlist.items():
-        current, prior, product_name = get_pricecharting_history(query)
-        pct = calc_pct(current, prior)
+    for name, info in watchlist.items():
+        price, change = get_card_price(info)
         flag = ""
-        if pct is not None:
-            if pct >= 15:
+        if change is not None:
+            if change >= 15:
                 flag = " 🚀"
-            elif pct <= -15:
+            elif change <= -15:
                 flag = " ⚠️"
         lines.append(f"\n{name}{flag}")
-        if not current:
+        if not price:
             lines.append("  No price data found")
             continue
-        lines.append(f"Latest: ${current:.0f}")
-        if pct is not None:
-            arrow = "▲" if pct >= 0 else "▼"
-            lines.append(f"vs prior: {arrow} {abs(pct):.1f}%")
+        lines.append(f"Market: ${price:.0f}")
+        if change is not None:
+            arrow = "▲" if change >= 0 else "▼"
+            lines.append(f"7d change: {arrow} {abs(change):.1f}%")
         time.sleep(0.5)
     return "\n".join(lines)
+
 
 def build_hype_radar_section(title, emoji, subreddit, watchlist):
     lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} HYPE RADAR — {title}", "━━━━━━━━━━━━━━━"]
     reddit_mentions = {}
     try:
         url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=50"
-        r = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         posts = r.json().get("data", {}).get("children", [])
         cutoff = datetime.utcnow() - timedelta(hours=24)
         for post in posts:
@@ -135,36 +121,33 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist):
             if created < cutoff:
                 continue
             text = (data.get("title", "") + " " + data.get("selftext", "")).lower()
-            for card_name in watchlist:
-                keywords = card_name.lower().split()
-                if all(kw in text for kw in keywords[:2]):
+            for card_name, info in watchlist.items():
+                if info["name"].lower() in text:
                     reddit_mentions[card_name] = reddit_mentions.get(card_name, 0) + 1
         time.sleep(1)
     except Exception as e:
         lines.append(f"Reddit fetch error: {e}")
-
     hype_cards = []
-    for name, query in watchlist.items():
+    for name, info in watchlist.items():
         mentions = reddit_mentions.get(name, 0)
         if mentions >= 3:
-            current, prior, _ = get_pricecharting_history(query)
-            pct = calc_pct(current, prior)
-            if pct and pct >= 15:
-                hype_cards.append((name, mentions, pct, current))
-
+            price, change = get_card_price(info)
+            if change and change >= 15:
+                hype_cards.append((name, mentions, change, price))
     if not hype_cards:
         lines.append("No hype signals today.")
     else:
-        for name, mentions, pct, current in hype_cards:
+        for name, mentions, change, price in hype_cards:
             lines.append(f"\n{name}")
             lines.append(f"Reddit mentions (24hr): {mentions}")
-            lines.append(f"Price change: +{pct:.1f}%")
-            if current:
-                lines.append(f"Current: ${current:.0f}")
-
+            lines.append(f"7d price change: +{change:.1f}%")
+            if price:
+                lines.append(f"Market: ${price:.0f}")
     return "\n".join(lines)
 
-# ─── MAIN ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────────────────────
+
 def build_message():
     now_est = datetime.utcnow() - timedelta(hours=5)
     today = now_est.strftime("%a %b %-d")
@@ -176,6 +159,7 @@ def build_message():
     lines.append(build_hype_radar_section("POKEMON", "🔥", "PokemonTCG", POKEMON_WATCHLIST))
     return "\n".join(lines)
 
+
 def send_whatsapp(body):
     client = Client(ACCOUNT_SID, AUTH_TOKEN)
     message = client.messages.create(
@@ -184,6 +168,7 @@ def send_whatsapp(body):
         to=MY_WHATSAPP,
     )
     print(f"Sent! SID: {message.sid}")
+
 
 if __name__ == "__main__":
     print("Building message...")
