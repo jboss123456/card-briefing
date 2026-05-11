@@ -39,7 +39,7 @@ def get_pricecharting_price(query):
     try:
         url = "https://www.pricecharting.com/api/products"
         params = {"q": query, "status": "price"}
-                resp = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), params=params, timeout=10)
+        resp = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), params=params, timeout=10)
         print(f"PriceCharting [{query}]: {resp.status_code} {resp.text[:300]}")
         data = resp.json()
         products = data.get("products", [])
@@ -61,7 +61,7 @@ def get_pricecharting_history(query):
     try:
         url = "https://www.pricecharting.com/api/products"
         params = {"q": query, "status": "price"}
-                resp = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), params=params, timeout=10)
+        resp = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), params=params, timeout=10)
         data = resp.json()
         products = data.get("products", [])
         if not products:
@@ -126,7 +126,7 @@ def build_hype_radar_section(title, emoji, subreddit, watchlist):
     reddit_mentions = {}
     try:
         url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=50"
-                r = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         posts = r.json().get("data", {}).get("children", [])
         cutoff = datetime.utcnow() - timedelta(hours=24)
         for post in posts:
