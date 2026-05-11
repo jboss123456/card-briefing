@@ -39,7 +39,7 @@ def get_pricecharting_price(query):
     try:
         url = "https://www.pricecharting.com/api/products"
         params = {"q": query, "status": "price"}
-        resp = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), params=params, timeout=10)
+        resp = requests.get(url, params=params, timeout=10)
         print(f"PriceCharting [{query}]: {resp.status_code} {resp.text[:300]}")
         data = resp.json()
         products = data.get("products", [])
@@ -61,7 +61,7 @@ def get_pricecharting_history(query):
     try:
         url = "https://www.pricecharting.com/api/products"
         params = {"q": query, "status": "price"}
-        resp = requests.get(f'http://api.scraperapi.com?api_key={SCRAPER_KEY}&url=' + requests.utils.quote(url, safe=''), params=params, timeout=10)
+        resp = requests.get(url, params=params, timeout=10)
         data = resp.json()
         products = data.get("products", [])
         if not products:
