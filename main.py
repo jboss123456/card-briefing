@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 # ─── TWILIO CONFIG ───────────────────────────────────────────────────────────────────────────────────────────
 ACCOUNT_SID  = os.environ.get("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN   = os.environ.get("TWILIO_AUTH_TOKEN")
-SANDBOX_FROM = "whatsapp:+14155238886"
-MY_WHATSAPP  = "whatsapp:+15148339119"
+TWILIO_FROM   = os.environ.get("TWILIO_FROM")
+TWILIO_TO     = os.environ.get("TWILIO_TO")
 
 # ─── TCG API CONFIG ──────────────────────────────────────────────────────────────────────────────────────
 TCG_API_KEY  = os.environ.get("TCG_API_KEY")
@@ -151,11 +151,11 @@ def build_message():
     pk_hype = build_hype_radar_section("POKEMON", "🔍", "pokemontcg", POKEMON_WATCHLIST)
     return "\n\n".join([header, my_cards, op_watch, pk_watch, op_hype, pk_hype])
 
-def send_whatsapp(message):
+def send_sms(message):
     client = Client(ACCOUNT_SID, AUTH_TOKEN)
     client.messages.create(
-        from_=SANDBOX_FROM,
-        to=MY_WHATSAPP,
+        from_=TWILIO_FROM,
+        to=TWILIO_TO,
         body=message
     )
 
@@ -163,5 +163,5 @@ if __name__ == "__main__":
     print("Building message...")
     msg = build_message()
     print(msg)
-    send_whatsapp(msg)
+    send_sms(msg)
     print("Sent!")
