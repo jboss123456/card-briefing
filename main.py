@@ -57,7 +57,7 @@ def get_card_price(card_info):
         card = None
         if target_number:
             for c in cards:
-                if target_number.lower() in c.get("number", "").lower():
+                if target_number.lower() in (c.get("number") or "").lower():
                     card = c
                     break
         if card is None:
