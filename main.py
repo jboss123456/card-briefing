@@ -151,13 +151,6 @@ def build_message():
     pk_hype = build_hype_radar_section("POKEMON", "🔍", "pokemontcg", POKEMON_WATCHLIST)
     return "\n\n".join([header, my_cards, op_watch, pk_watch, op_hype, pk_hype])
 
-def keep_sandbox_alive():
-    client = Client(ACCOUNT_SID, AUTH_TOKEN)
-    client.messages.create(
-        body="alive",
-        from_="whatsapp:+15148339119",
-        to="whatsapp:+14155238886"
-    )
 
 def send_whatsapp(message):
     client = Client(ACCOUNT_SID, AUTH_TOKEN)
@@ -168,7 +161,6 @@ def send_whatsapp(message):
     )
 
 if __name__ == "__main__":
-    keep_sandbox_alive()
     print("Building message...")
     msg = build_message()
     print(msg)
