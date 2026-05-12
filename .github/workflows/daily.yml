@@ -25,4 +25,5 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+          TCG_API_KEY: ${{ secrets.TCG_API_KEY }}
         run: python main.py
