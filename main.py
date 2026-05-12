@@ -16,16 +16,16 @@ TCG_BASE_URL = "https://api.tcgapi.dev"
 
 # ─── MY CARDS ───────────────────────────────────────────────────────────────────────────────────────────────
 MY_CARDS = {
-    "Luffy OP13-118 CGC Pristine 10": {"name": "Luffy", "set": "OP13", "number": "118", "game": "one-piece-card-game"},
-    "Deoxys VSTAR GG46 CGC Pristine 10": {"name": "Deoxys VSTAR", "set": "GG46", "number": "GG46", "game": "pokemon"},
+    "Luffy OP13-118 CGC Pristine 10": {"name": "Luffy", "number": "OP13-118", "game": "one-piece-card-game"},
+    "Deoxys VSTAR GG46 CGC Pristine 10": {"name": "Deoxys VSTAR", "number": "GG46", "game": "pokemon"},
 }
 
 # ─── ONE PIECE WATCHLIST ──────────────────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
-    "Zoro OP13-119 CGC 10": {"name": "Zoro", "set": "OP13", "number": "119", "game": "one-piece-card-game"},
-    "Sanji OP13-117 CGC 10": {"name": "Sanji", "set": "OP13", "number": "117", "game": "one-piece-card-game"},
-    "Nami OP13-116 CGC 10": {"name": "Nami", "set": "OP13", "number": "116", "game": "one-piece-card-game"},
-    "Gol D Roger OP13-118 CGC 10": {"name": "Gol D Roger", "set": "OP13", "number": "118", "game": "one-piece-card-game"},
+    "Zoro OP13-119 CGC 10": {"name": "Zoro", "number": "OP13-119", "game": "one-piece-card-game"},
+    "Sanji OP13-117 CGC 10": {"name": "Sanji", "number": "OP13-117", "game": "one-piece-card-game"},
+    "Nami OP13-116 CGC 10": {"name": "Nami", "number": "OP13-116", "game": "one-piece-card-game"},
+    "Gol D Roger OP13-118 CGC 10": {"name": "Roger", "number": "OP13-118", "game": "one-piece-card-game"},
 }
 
 # ─── POKEMON WATCHLIST ───────────────────────────────────────────────────────────────────────────────────
@@ -52,9 +52,20 @@ def get_card_price(card_info):
         cards = data.get("data", []) or data.get("results", [])
         if not cards:
             return None, None
-        card = cards[0]
+        # Try to match by card number, fall back to first result
+        target_number = card_info.get("number", "")
+        card = None
+        if target_number:
+            for c in cards:
+                if target_number.lower() in c.get("number", "").lower():
+                    card = c
+                    break
+        if card is None:
+            card = cards[0]
+        print(f"TCG API MATCH [{card_info['name']}]: matched '{card.get('name')}' #{card.get('number')} market={card.get('market_price')}")
         prices = card.get("prices", {})
-        market = prices.get("market") or prices.get("mid") or prices.get("low")
+        market = (prices.get("market_price") or prices.get("market") or
+                  prices.get("mid") or prices.get("low") or prices.get("high"))
         if market is None:
             market = card.get("market_price") or card.get("low_price")
         change_7d = card.get("price_change_7d") or card.get("priceChange7d")
@@ -76,7 +87,7 @@ def build_my_cards_section():
         if not price:
             lines.append("  No price data found")
             continue
-        lines.append(f"  Market: ${price:.0f}")
+        lines.append(f"  Market: ${price:.2f}")
         if change is not None:
             arrow = "▲" if change >= 0 else "▼"
             lines.append(f"  7d change: {arrow} {abs(change):.1f}%")
@@ -97,7 +108,7 @@ def build_watchlist_section(title, emoji, watchlist):
         if not price:
             lines.append("  No price data found")
             continue
-        lines.append(f"  Market: ${price:.0f}")
+        lines.append(f"  Market: ${price:.2f}")
         if change is not None:
             arrow = "▲" if change >= 0 else "▼"
             lines.append(f"  7d change: {arrow} {abs(change):.1f}%")
