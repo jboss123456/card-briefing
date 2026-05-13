@@ -4,7 +4,7 @@ import requests
 from twilio.rest import Client
 from datetime import datetime, timedelta
 
-# ─── TWILIO CONFIG ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ─── TWILIO CONFIG ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ACCOUNT_SID  = os.environ.get("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN   = os.environ.get("TWILIO_AUTH_TOKEN")
 SANDBOX_FROM  = "whatsapp:+14155238886"
@@ -37,7 +37,6 @@ POKEMON_WATCHLIST = {
     "Rayquaza VMAX Alt Art PSA 10": {"name": "Rayquaza VMAX", "number": "218", "game": "pokemon"},
     "API TEST": {"name": "Pikachu", "number": "1", "game": "pokemon"},
 }
-
 # ─── TCG API FUNCTIONS ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def get_card_price(card_info):
@@ -76,23 +75,13 @@ def get_card_price(card_info):
 
 def get_one_piece_price(card_info):
     try:
-        headers = {
-            'x-rapidapi-key': RAPIDAPI_KEY,
-            'x-rapidapi-host': 'one-piece-tcg-prices.p.rapidapi.com'
-        }
-        params = {'card_number': card_info.get('number', '')}
-        resp = requests.get('https://one-piece-tcg-prices.p.rapidapi.com/cards', headers=headers, params=params, timeout=10)
+        card_number = card_info.get('number', '')
+        resp = requests.get(f'https://optcgapi.com/api/sets/card/{card_number}/', timeout=10)
         print(f'OP API [{card_info["name"]}]: {resp.status_code} {resp.text[:300]}')
         data = resp.json()
-        cards = data.get('data', data.get('results', data if isinstance(data, list) else []))
-        if not cards:
-            return None, None
-        card = cards[0] if isinstance(cards, list) else cards
-        prices = card.get('prices', {})
-        tcgplayer = prices.get('tcgplayer', {})
-        market = tcgplayer.get('market_price') or tcgplayer.get('market') or tcgplayer.get('mid')
-        change = card.get('price_change_7d') or card.get('priceChange7d')
-        return market, change
+        price = data.get('price') or data.get('market_price') or data.get('tcgplayer_price') or data.get('low_price')
+        change = data.get('price_change') or data.get('change_7d')
+        return price, change
     except Exception as e:
         print(f'OP API error [{card_info["name"]}]: {e}')
         return None, None
@@ -167,7 +156,7 @@ def build_message():
     today = datetime.utcnow().strftime("%a %b %-d")
     header = f"U0001f4c8 CARD BRIEFING — {today}"
     my_cards = build_my_cards_section()
-    op_watch = build_watchlist_section("ONE PIECE WATCHLIST", "U0001f3f4‍☠️", ONE_PIECE_WATCHLIST)
+    op_watch = build_watchlist_section("ONE PIECE WATCHLIST", "U0001f3f4", ONE_PIECE_WATCHLIST)
     pk_watch = build_watchlist_section("POKEMON WATCHLIST", "U0001f004", POKEMON_WATCHLIST)
     op_hype = build_hype_radar_section("ONE PIECE", "U0001f50d", "OnePieceCardGame", ONE_PIECE_WATCHLIST)
     pk_hype = build_hype_radar_section("POKEMON", "U0001f50d", "pokemontcg", POKEMON_WATCHLIST)
