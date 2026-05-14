@@ -59,7 +59,6 @@ def save_price_history(history):
     except Exception as e:
         print(f"Could not save price history: {e}")
 
-# Global price history dict loaded once
 _price_history = None
 
 def get_history():
@@ -75,70 +74,83 @@ def get_ebay_graded_price(card_info):
     card_name = card_info.get("name", "")
     card_key = card_info.get("number", card_name)
     try:
-        # Build eBay completed/sold listings search URL
         query = card_name.replace(" ", "+")
         ebay_url = (
             "https://www.ebay.com/sch/i.html"
             "?_nkw=" + query +
             "&LH_Sold=1&LH_Complete=1&LH_ItemCondition=3000&_sop=13"
         )
-        scraper_url = "http://api.scraperapi.com/"
         params = {
             "api_key": SCRAPER_API_KEY,
             "url": ebay_url,
             "render": "false",
         }
         print(f"eBay scrape [{card_name}]: fetching eBay sold listings...")
-        resp = requests.get(scraper_url, params=params, timeout=30)
+        resp = requests.get("http://api.scraperapi.com/", params=params, timeout=30)
         print(f"eBay scrape [{card_name}]: status={resp.status_code} len={len(resp.text)}")
         if resp.status_code != 200:
             raise ValueError(f"ScraperAPI returned {resp.status_code}")
-        soup = BeautifulSoup(resp.text, "html.parser")
-        # Extract sold prices from eBay results
-        price_tags = soup.select(".s-item__price")
+        html = resp.text
+        # Try multiple CSS selectors for eBay price elements (eBay changes class names)
+        soup = BeautifulSoup(html, "html.parser")
+        price_elements = (
+            soup.select(".s-item__price") or
+            soup.select("[class*=price]") or
+            soup.select(".item__price") or
+            []
+        )
         prices = []
-        for tag in price_tags:
+        for tag in price_elements:
             text = tag.get_text(strip=True)
-            # Handle ranges like "$10.00 to $20.00" - take the lower
             text = text.split(" to ")[0]
-            match = re.search(r"[\d,]+\.\d{2}", text)
-            if match:
-                val = float(match.group().replace(",", ""))
-                if val > 0.5:  # filter out junk listings
+            m = re.search(r"[\$]([\d,]+\.\d{2})", text)
+            if m:
+                val = float(m.group(1).replace(",", ""))
+                if 0.5 < val < 50000:
                     prices.append(val)
+        # Fallback: regex scan raw HTML for sold price patterns in structured data
+        if not prices:
+            # Look for JSON-LD or itemprop price data
+            raw_prices = re.findall(r'"soldPrice"\s*:\s*\{[^}]*"value"\s*:\s*"([\d.]+)"', html)
+            if not raw_prices:
+                raw_prices = re.findall(r'"price"\s*:\s*"([\d.]+)"', html)
+            if not raw_prices:
+                # Last resort: find all $XX.XX patterns in the HTML body near sold items
+                raw_prices = re.findall(r'US\s*\$([\d,]+\.\d{2})', html)
+            for p in raw_prices[:20]:
+                try:
+                    val = float(str(p).replace(",", ""))
+                    if 0.5 < val < 50000:
+                        prices.append(val)
+                except Exception:
+                    pass
         print(f"eBay scrape [{card_name}]: found {len(prices)} prices: {prices[:10]}")
         if not prices:
             raise ValueError("No sold prices found on eBay")
-        # Take last 5 (most recent are first on eBay sorted by end date desc)
         recent = prices[:5]
         avg_price = round(sum(recent) / len(recent), 2)
         print(f"eBay scrape [{card_name}]: avg of {len(recent)} prices = ${avg_price}")
-        # Compare to previous price for 7d change
+        # Update price history
         history = get_history()
         today_str = datetime.utcnow().strftime("%Y-%m-%d")
-        seven_days_ago = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
         card_history = history.get(card_key, {})
-        # Save today's price
         card_history[today_str] = avg_price
-        # Keep only last 14 days of history
         cutoff = (datetime.utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
         card_history = {k: v for k, v in card_history.items() if k >= cutoff}
         history[card_key] = card_history
-        # Find a price from 7 days ago (or closest available)
+        # Find 7-day-ago price
         past_price = None
         for days_back in range(7, 14):
             check_date = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
             if check_date in card_history:
                 past_price = card_history[check_date]
                 break
-        # Calculate percent change
         pct_change = None
         if past_price and past_price > 0:
             pct_change = round(((avg_price - past_price) / past_price) * 100, 1)
         return avg_price, pct_change
     except Exception as e:
         print(f"eBay scrape error [{card_name}]: {e}")
-        # Fall back to last known price from history
         history = get_history()
         card_history = history.get(card_key, {})
         if card_history:
@@ -153,10 +165,7 @@ def get_ebay_graded_price(card_info):
 def get_card_price(card_info):
     try:
         headers = {"x-api-key": TCG_API_KEY}
-        params = {
-            "q": card_info["name"],
-            "game": card_info["game"],
-        }
+        params = {"q": card_info["name"], "game": card_info["game"]}
         resp = requests.get(f"{TCG_BASE_URL}/v1/search", headers=headers, params=params, timeout=10)
         print(f"TCG API [{card_info['name']}]: {resp.status_code} {resp.text[:300]}")
         data = resp.json()
@@ -187,7 +196,6 @@ def get_card_price(card_info):
 # ─── SECTION BUILDERS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def format_change(change):
-    """Format percent change as arrow + value string."""
     if change is None:
         return "— n/a"
     if change > 0:
@@ -266,18 +274,13 @@ def build_message():
     pk_watch = build_watchlist_section("POKEMON WATCHLIST", "U0001f3c6", POKEMON_WATCHLIST)
     op_hype = build_hype_radar_section("ONE PIECE", "U0001f525", "one-piece-card-game", ONE_PIECE_WATCHLIST)
     pk_hype = build_hype_radar_section("POKEMON", "U0001f50d", "pokemontcg", POKEMON_WATCHLIST)
-    # Save updated price history after all lookups
     if _price_history:
         save_price_history(_price_history)
     return "\n\n".join([header, my_cards, op_watch, pk_watch, op_hype, pk_hype])
 
 def send_whatsapp(message):
     client = Client(ACCOUNT_SID, AUTH_TOKEN)
-    client.messages.create(
-        from_=SANDBOX_FROM,
-        to=MY_WHATSAPP,
-        body=message
-    )
+    client.messages.create(from_=SANDBOX_FROM, to=MY_WHATSAPP, body=message)
 
 if __name__ == "__main__":
     print("Building message...")
