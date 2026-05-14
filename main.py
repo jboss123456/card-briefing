@@ -1,6 +1,9 @@
 import os
+import re
+import json
 import time
 import requests
+from bs4 import BeautifulSoup
 from twilio.rest import Client
 from datetime import datetime, timedelta
 
@@ -11,22 +14,23 @@ SANDBOX_FROM  = "whatsapp:+14155238886"
 MY_WHATSAPP   = "whatsapp:+15148339119"
 
 # ─── TCG API CONFIG ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-TCG_API_KEY  = os.environ.get("TCG_API_KEY")
-TCG_BASE_URL = "https://api.tcgapi.dev"
-RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
+TCG_API_KEY   = os.environ.get("TCG_API_KEY")
+TCG_BASE_URL  = "https://api.tcgapi.dev"
+SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY")
+PRICE_HISTORY_FILE = "price_history.json"
 
 # ─── MY CARDS ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 MY_CARDS = {
-    "Luffy OP13-118 CGC Pristine 10": {"name": "Luffy", "number": "OP13-118", "game": "one-piece-card-game"},
+    "Luffy OP13-118 CGC Pristine 10": {"name": "Luffy OP13-118 CGC 10", "number": "OP13-118", "game": "one-piece-card-game"},
     "Deoxys VSTAR GG46 CGC Pristine 10": {"name": "Deoxys VSTAR", "number": "GG46", "game": "pokemon"},
 }
 
 # ─── ONE PIECE WATCHLIST ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
-    "Zoro OP13-119 CGC 10": {"name": "Zoro", "number": "OP13-119", "game": "one-piece-card-game"},
-    "Sanji OP13-117 CGC 10": {"name": "Sanji", "number": "OP13-117", "game": "one-piece-card-game"},
-    "Nami OP13-116 CGC 10": {"name": "Nami", "number": "OP13-116", "game": "one-piece-card-game"},
-    "Gol D Roger OP13-118 CGC 10": {"name": "Roger", "number": "OP13-118", "game": "one-piece-card-game"},
+    "Zoro OP13-119 CGC 10": {"name": "Zoro OP13-119 CGC 10", "number": "OP13-119", "game": "one-piece-card-game"},
+    "Sanji OP13-117 CGC 10": {"name": "Sanji OP13-117 CGC 10", "number": "OP13-117", "game": "one-piece-card-game"},
+    "Nami OP13-116 CGC 10": {"name": "Nami OP13-116 CGC 10", "number": "OP13-116", "game": "one-piece-card-game"},
+    "Gol D Roger OP13-118 CGC 10": {"name": "Roger OP13-118 CGC 10", "number": "OP13-118", "game": "one-piece-card-game"},
 }
 
 # ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -37,6 +41,113 @@ POKEMON_WATCHLIST = {
     "Rayquaza VMAX Alt Art PSA 10": {"name": "Rayquaza VMAX", "number": "218", "game": "pokemon"},
     "API TEST": {"name": "Pikachu", "number": "1", "game": "pokemon"},
 }
+# ─── PRICE HISTORY ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+def load_price_history():
+    if os.path.exists(PRICE_HISTORY_FILE):
+        try:
+            with open(PRICE_HISTORY_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_price_history(history):
+    try:
+        with open(PRICE_HISTORY_FILE, "w") as f:
+            json.dump(history, f, indent=2)
+    except Exception as e:
+        print(f"Could not save price history: {e}")
+
+# Global price history dict loaded once
+_price_history = None
+
+def get_history():
+    global _price_history
+    if _price_history is None:
+        _price_history = load_price_history()
+    return _price_history
+
+# ─── EBAY GRADED PRICE ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+def get_ebay_graded_price(card_info):
+    """Scrape eBay completed listings for a graded card and return avg of last 5 sold prices."""
+    card_name = card_info.get("name", "")
+    card_key = card_info.get("number", card_name)
+    try:
+        # Build eBay completed/sold listings search URL
+        query = card_name.replace(" ", "+")
+        ebay_url = (
+            "https://www.ebay.com/sch/i.html"
+            "?_nkw=" + query +
+            "&LH_Sold=1&LH_Complete=1&LH_ItemCondition=3000&_sop=13"
+        )
+        scraper_url = "http://api.scraperapi.com/"
+        params = {
+            "api_key": SCRAPER_API_KEY,
+            "url": ebay_url,
+            "render": "false",
+        }
+        print(f"eBay scrape [{card_name}]: fetching eBay sold listings...")
+        resp = requests.get(scraper_url, params=params, timeout=30)
+        print(f"eBay scrape [{card_name}]: status={resp.status_code} len={len(resp.text)}")
+        if resp.status_code != 200:
+            raise ValueError(f"ScraperAPI returned {resp.status_code}")
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # Extract sold prices from eBay results
+        price_tags = soup.select(".s-item__price")
+        prices = []
+        for tag in price_tags:
+            text = tag.get_text(strip=True)
+            # Handle ranges like "$10.00 to $20.00" - take the lower
+            text = text.split(" to ")[0]
+            match = re.search(r"[\d,]+\.\d{2}", text)
+            if match:
+                val = float(match.group().replace(",", ""))
+                if val > 0.5:  # filter out junk listings
+                    prices.append(val)
+        print(f"eBay scrape [{card_name}]: found {len(prices)} prices: {prices[:10]}")
+        if not prices:
+            raise ValueError("No sold prices found on eBay")
+        # Take last 5 (most recent are first on eBay sorted by end date desc)
+        recent = prices[:5]
+        avg_price = round(sum(recent) / len(recent), 2)
+        print(f"eBay scrape [{card_name}]: avg of {len(recent)} prices = ${avg_price}")
+        # Compare to previous price for 7d change
+        history = get_history()
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        seven_days_ago = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+        card_history = history.get(card_key, {})
+        # Save today's price
+        card_history[today_str] = avg_price
+        # Keep only last 14 days of history
+        cutoff = (datetime.utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
+        card_history = {k: v for k, v in card_history.items() if k >= cutoff}
+        history[card_key] = card_history
+        # Find a price from 7 days ago (or closest available)
+        past_price = None
+        for days_back in range(7, 14):
+            check_date = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+            if check_date in card_history:
+                past_price = card_history[check_date]
+                break
+        # Calculate percent change
+        pct_change = None
+        if past_price and past_price > 0:
+            pct_change = round(((avg_price - past_price) / past_price) * 100, 1)
+        return avg_price, pct_change
+    except Exception as e:
+        print(f"eBay scrape error [{card_name}]: {e}")
+        # Fall back to last known price from history
+        history = get_history()
+        card_history = history.get(card_key, {})
+        if card_history:
+            last_date = max(card_history.keys())
+            last_price = card_history[last_date]
+            print(f"eBay scrape [{card_name}]: using last known price ${last_price} from {last_date}")
+            return last_price, None
+        return None, None
+
 # ─── TCG API FUNCTIONS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def get_card_price(card_info):
@@ -73,79 +184,78 @@ def get_card_price(card_info):
         print(f"TCG API error [{card_info['name']}]: {e}")
         return None, None
 
-def get_one_piece_price(card_info):
-    try:
-        card_number = card_info.get('number', '')
-        resp = requests.get(f'https://optcgapi.com/api/sets/card/{card_number}/', timeout=10)
-        print(f'OP API [{card_info["name"]}]: {resp.status_code} {resp.text[:300]}')
-        data = resp.json()
-        if isinstance(data, list): data = data[0] if data else {}
-        price = data.get('price') or data.get('market_price') or data.get('tcgplayer_price') or data.get('low_price')
-        change = data.get('price_change') or data.get('change_7d')
-        return price, change
-    except Exception as e:
-        print(f'OP API error [{card_info["name"]}]: {e}')
-        return None, None
-
-def calc_pct(change_7d):
-    return change_7d if change_7d is not None else None
 # ─── SECTION BUILDERS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+def format_change(change):
+    """Format percent change as arrow + value string."""
+    if change is None:
+        return "— n/a"
+    if change > 0:
+        return f"▲ +{change:.1f}%"
+    elif change < 0:
+        return f"▼ {change:.1f}%"
+    else:
+        return "— 0%"
+
 def build_my_cards_section():
-    lines = ["━━━━━━━━━━━━━━━", "U0001f48e MY CARDS", "━━━━━━━━━━━━━━━"]
-    for name, info in MY_CARDS.items():
-        price, change = get_one_piece_price(info) if info.get('game') == 'one-piece-card-game' else get_card_price(info)
-        lines.append(f"\n{name}")
-        if not price:
-            lines.append("  No price data found")
+    out = ["━━━━━━━━━━━━━━━", "U0001f48e MY CARDS", "━━━━━━━━━━━━━━━"]
+    for label, info in MY_CARDS.items():
+        if info.get('game') == 'one-piece-card-game':
+            price, change = get_ebay_graded_price(info)
+        else:
+            price, change = get_card_price(info)
+        out.append(f"\n{label}")
+        if price is None:
+            out.append("  No price data found")
             continue
-        lines.append(f"  Market: ${price:.2f}")
-        if change is not None:
-            arrow = "▲" if change >= 0 else "▼"
-            lines.append(f"  7d change: {arrow} {abs(change):.1f}%")
+        out.append(f"  Market: ${price:.2f}")
+        out.append(f"  7d change: {format_change(change)}")
         time.sleep(0.5)
-    return "\n".join(lines)
+    return "\n".join(out)
 
 def build_watchlist_section(title, emoji, watchlist):
-    lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title}", "━━━━━━━━━━━━━━━"]
-    for name, info in watchlist.items():
-        price, change = get_one_piece_price(info) if info.get('game') == 'one-piece-card-game' else get_card_price(info)
+    out = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title}", "━━━━━━━━━━━━━━━"]
+    for label, info in watchlist.items():
+        if info.get('game') == 'one-piece-card-game':
+            price, change = get_ebay_graded_price(info)
+        else:
+            price, change = get_card_price(info)
         flag = ""
         if change is not None:
             if change >= 15:
                 flag = " U0001f680"
             elif change <= -15:
                 flag = " ⚠️"
-        lines.append(f"\n{name}{flag}")
-        if not price:
-            lines.append("  No price data found")
+        out.append(f"\n{label}{flag}")
+        if price is None:
+            out.append("  No price data found")
             continue
-        lines.append(f"  Market: ${price:.2f}")
-        if change is not None:
-            arrow = "▲" if change >= 0 else "▼"
-            lines.append(f"  7d change: {arrow} {abs(change):.1f}%")
+        out.append(f"  Market: ${price:.2f}")
+        out.append(f"  7d change: {format_change(change)}")
         time.sleep(0.5)
-    return "\n".join(lines)
+    return "\n".join(out)
 
 def build_hype_radar_section(title, emoji, game, watchlist):
-    lines = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title} HYPE RADAR", "━━━━━━━━━━━━━━━"]
+    out = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title} HYPE RADAR", "━━━━━━━━━━━━━━━"]
     hype_cards = []
-    for name, info in watchlist.items():
+    for label, info in watchlist.items():
         if info.get("game") != game:
             continue
-        price, change = get_one_piece_price(info) if info.get('game') == 'one-piece-card-game' else get_card_price(info)
+        if info.get('game') == 'one-piece-card-game':
+            price, change = get_ebay_graded_price(info)
+        else:
+            price, change = get_card_price(info)
         if change is not None and abs(change) >= 10:
-            hype_cards.append((name, price, change))
+            hype_cards.append((label, price, change))
         time.sleep(0.5)
     if not hype_cards:
-        lines.append("  No big movers today")
+        out.append("  No big movers today")
     else:
         hype_cards.sort(key=lambda x: abs(x[2]), reverse=True)
-        for name, price, change in hype_cards:
-            arrow = "▲" if change >= 0 else "▼"
+        for label, price, change in hype_cards:
             price_str = f"${price:.2f}" if price else "N/A"
-            lines.append(f"  {name}: {price_str} {arrow}{abs(change):.1f}%")
-    return "\n".join(lines)
+            out.append(f"  {label}: {price_str} {format_change(change)}")
+    return "\n".join(out)
 
 def build_message():
     now = datetime.utcnow() - timedelta(hours=4)
@@ -156,6 +266,9 @@ def build_message():
     pk_watch = build_watchlist_section("POKEMON WATCHLIST", "U0001f3c6", POKEMON_WATCHLIST)
     op_hype = build_hype_radar_section("ONE PIECE", "U0001f525", "one-piece-card-game", ONE_PIECE_WATCHLIST)
     pk_hype = build_hype_radar_section("POKEMON", "U0001f50d", "pokemontcg", POKEMON_WATCHLIST)
+    # Save updated price history after all lookups
+    if _price_history:
+        save_price_history(_price_history)
     return "\n\n".join([header, my_cards, op_watch, pk_watch, op_hype, pk_hype])
 
 def send_whatsapp(message):
