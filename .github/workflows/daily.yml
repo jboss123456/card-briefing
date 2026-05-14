@@ -2,12 +2,14 @@ name: Daily Card Briefing
 
 on:
   schedule:
-    - cron: '0 14 * * *'  # 9am EST (UTC-5)
-  workflow_dispatch:        # allows manual trigger
+    - cron: '0 14 * * *' # 9am EST (UTC-5)
+  workflow_dispatch: # allows manual trigger
 
 jobs:
   send-briefing:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v3
 
@@ -26,4 +28,13 @@ jobs:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
           TCG_API_KEY: ${{ secrets.TCG_API_KEY }}
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
         run: python main.py
+
+      - name: Save price history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add price_history.json || true
+          git diff --cached --quiet || git commit -m "Update price history [skip ci]"
+          git push || true
