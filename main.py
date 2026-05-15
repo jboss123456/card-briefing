@@ -7,25 +7,21 @@ from bs4 import BeautifulSoup
 from twilio.rest import Client
 from datetime import datetime, timedelta
 
-# ─── TWILIO CONFIG ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
 SANDBOX_FROM = "whatsapp:+14155238886"
 MY_WHATSAPP = "whatsapp:+15148339119"
 
-# ─── TCG API CONFIG ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 TCG_API_KEY = os.environ.get("TCG_API_KEY")
 TCG_BASE_URL = "https://api.tcgapi.dev"
 SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY")
 PRICE_HISTORY_FILE = "price_history.json"
 
-# ─── MY CARDS ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 MY_CARDS = {
         "Luffy OP13-118 CGC Pristine 10": {"name": "Luffy OP13-118 CGC 10", "number": "OP13-118", "game": "one-piece-card-game"},
         "Deoxys VSTAR GG46 CGC Pristine 10": {"name": "Deoxys VSTAR", "number": "GG46", "game": "pokemon"},
 }
 
-# ─── ONE PIECE WATCHLIST ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ONE_PIECE_WATCHLIST = {
         "Zoro OP13-119 CGC 10": {"name": "Zoro OP13-119 CGC 10", "number": "OP13-119", "game": "one-piece-card-game"},
         "Sanji OP13-117 CGC 10": {"name": "Sanji OP13-117 CGC 10", "number": "OP13-117", "game": "one-piece-card-game"},
@@ -33,7 +29,6 @@ ONE_PIECE_WATCHLIST = {
         "Gol D Roger OP13-118 CGC 10": {"name": "Roger OP13-118 CGC 10", "number": "OP13-118", "game": "one-piece-card-game"},
 }
 
-# ─── POKEMON WATCHLIST ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 POKEMON_WATCHLIST = {
         "Charizard ex 199 PSA 10": {"name": "Charizard ex", "number": "199", "game": "pokemon"},
         "Umbreon VMAX Alt Art PSA 10": {"name": "Umbreon VMAX", "number": "215", "game": "pokemon"},
@@ -41,7 +36,6 @@ POKEMON_WATCHLIST = {
         "Rayquaza VMAX Alt Art PSA 10": {"name": "Rayquaza VMAX", "number": "218", "game": "pokemon"},
         "API TEST": {"name": "Pikachu", "number": "1", "game": "pokemon"},
 }
-# ─── PRICE HISTORY ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def load_price_history():
         if os.path.exists(PRICE_HISTORY_FILE):
@@ -67,8 +61,6 @@ def get_history():
                     _price_history = load_price_history()
                 return _price_history
 
-# ─── EBAY GRADED PRICE ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
 def get_ebay_graded_price(card_info):
         """Scrape eBay completed listings for a graded card and return avg of last 5 sold prices."""
     card_name = card_info.get("name", "")
@@ -91,7 +83,6 @@ def get_ebay_graded_price(card_info):
                 if resp.status_code != 200:
                                 raise ValueError(f"ScraperAPI returned {resp.status_code}")
                             html = resp.text
-        # Try multiple CSS selectors for eBay price elements (eBay changes class names)
         soup = BeautifulSoup(html, "html.parser")
         price_elements = (
                         soup.select(".s-item__price") or
@@ -108,14 +99,11 @@ def get_ebay_graded_price(card_info):
                                             val = float(m.group(1).replace(",", ""))
                                             if 10 < val < 5000 and val != 20.00:
                                                                     prices.append(val)
-                                                        # Fallback: regex scan raw HTML for sold price patterns in structured data
                                                         if not prices:
-                                                                        # Look for JSON-LD or itemprop price data
                                                                         raw_prices = re.findall(r'"soldPrice"\s*:\s*\{[^}]*"value"\s*:\s*"([\d.]+)"', html)
                                                                         if not raw_prices:
                                                                                             raw_prices = re.findall(r'"price"\s*:\s*"([\d.]+)"', html)
                                                                                         if not raw_prices:
-                                                                                                            # Last resort: find all $XX.XX patterns in the HTML body near sold items
                                                                                                             raw_prices = re.findall(r'US\s*\$([\d,]+\.\d{2})', html)
                                                                                                         for p in raw_prices[:20]:
                                                                                                                             try:
@@ -131,7 +119,6 @@ def get_ebay_graded_price(card_info):
                                                 recent = prices[:5]
         avg_price = round(sum(recent) / len(recent), 2)
         print(f"eBay scrape [{card_name}]: avg of {len(recent)} prices = ${avg_price}")
-        # Update price history
         history = get_history()
         today_str = datetime.utcnow().strftime("%Y-%m-%d")
         card_history = history.get(card_key, {})
@@ -139,7 +126,6 @@ def get_ebay_graded_price(card_info):
         cutoff = (datetime.utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
         card_history = {k: v for k, v in card_history.items() if k >= cutoff}
         history[card_key] = card_history
-        # Find 7-day-ago price
         past_price = None
         for days_back in range(7, 14):
                         check_date = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
@@ -161,7 +147,6 @@ except Exception as e:
             return last_price, None
         return None, None
 
-# ─── TCG API FUNCTIONS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def get_card_price(card_info):
         try:
@@ -194,20 +179,18 @@ except Exception as e:
             print(f"TCG API error [{card_info['name']}]: {e}")
             return None, None
 
-    # ─── SECTION BUILDERS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
     def format_change(change):
             if change is None:
-                        return "— n/a"
+                        return "n/a"
                     if change > 0:
-                                return f"▲ +{change:.1f}%"
+                                return f"+{change:.1f}%"
 elif change < 0:
-        return f"▼ {change:.1f}%"
+        return f"{change:.1f}%"
 else:
-        return "— 0%"
+        return "0%"
 
 def build_my_cards_section():
-        out = ["━━━━━━━━━━━━━━━", "U0001f48e MY CARDS", "━━━━━━━━━━━━━━━"]
+        out = ["MY CARDS"]
     for label, info in MY_CARDS.items():
                 if info.get('game') == 'one-piece-card-game':
                                 price, change = get_ebay_graded_price(info)
@@ -223,7 +206,7 @@ else:
     return "\n".join(out)
 
 def build_watchlist_section(title, emoji, watchlist):
-        out = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title}", "━━━━━━━━━━━━━━━"]
+        out = [f"\n{emoji} {title}"]
     for label, info in watchlist.items():
                 if info.get('game') == 'one-piece-card-game':
                                 price, change = get_ebay_graded_price(info)
@@ -232,9 +215,9 @@ else:
         flag = ""
         if change is not None:
                         if change >= 15:
-                                            flag = " U0001f680"
+                                            flag = " (HOT)"
         elif change <= -15:
-                flag = " ⚠️"
+                flag = " (WARN)"
         out.append(f"\n{label}{flag}")
         if price is None:
                         out.append("  No price data found")
@@ -245,7 +228,7 @@ else:
     return "\n".join(out)
 
 def build_hype_radar_section(title, emoji, game, watchlist):
-        out = [f"\n━━━━━━━━━━━━━━━", f"{emoji} {title} HYPE RADAR", "━━━━━━━━━━━━━━━"]
+        out = [f"\n{emoji} {title} HYPE RADAR"]
     hype_cards = []
     for label, info in watchlist.items():
                 if info.get("game") != game:
@@ -269,12 +252,12 @@ else:
 def build_message():
         now = datetime.utcnow() - timedelta(hours=4)
     date_str = now.strftime("%A, %B %-d")
-    header = f"U0001f4c8 DAILY CARD BRIEFING\n{date_str}"
+    header = f"DAILY CARD BRIEFING\n{date_str}"
     my_cards = build_my_cards_section()
-    op_watch = build_watchlist_section("ONE PIECE WATCHLIST", "U0001f3f4", ONE_PIECE_WATCHLIST)
-    pk_watch = build_watchlist_section("POKEMON WATCHLIST", "U0001f3c6", POKEMON_WATCHLIST)
-    op_hype = build_hype_radar_section("ONE PIECE", "U0001f525", "one-piece-card-game", ONE_PIECE_WATCHLIST)
-    pk_hype = build_hype_radar_section("POKEMON", "U0001f50d", "pokemontcg", POKEMON_WATCHLIST)
+    op_watch = build_watchlist_section("ONE PIECE WATCHLIST", "OP", ONE_PIECE_WATCHLIST)
+    pk_watch = build_watchlist_section("POKEMON WATCHLIST", "PK", POKEMON_WATCHLIST)
+    op_hype = build_hype_radar_section("ONE PIECE", "OP", "one-piece-card-game", ONE_PIECE_WATCHLIST)
+    pk_hype = build_hype_radar_section("POKEMON", "PK", "pokemontcg", POKEMON_WATCHLIST)
     if _price_history:
                 save_price_history(_price_history)
     return "\n\n".join([header, my_cards, op_watch, pk_watch, op_hype, pk_hype])
