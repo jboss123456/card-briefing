@@ -26,7 +26,7 @@ ONE_PIECE_WATCHLIST = {
     "Zoro OP13-119 CGC 10": {"name": "Zoro OP13-119 CGC 10", "number": "OP13-119", "game": "one-piece-card-game"},
     "Sanji OP13-117 CGC 10": {"name": "Sanji OP13-117 CGC 10", "number": "OP13-117", "game": "one-piece-card-game"},
     "Nami OP13-116 CGC 10": {"name": "Nami OP13-116 CGC 10", "number": "OP13-116", "game": "one-piece-card-game"},
-    "Gol D Roger OP13-118 CGC 10": {"name": "Roger OP13-118 CGC 10", "number": "OP13-118", "game": "one-piece-card-game"},
+    "Gol D. Roger OP13-118 CGC 10": {"name": "Gol D. Roger OP13-118 CGC 10", "number": "OP13-118", "game": "one-piece-card-game"},
 }
 
 POKEMON_WATCHLIST = {
@@ -34,7 +34,6 @@ POKEMON_WATCHLIST = {
     "Umbreon VMAX Alt Art PSA 10": {"name": "Umbreon VMAX", "number": "215", "game": "pokemon"},
     "Pikachu VMAX Rainbow PSA 10": {"name": "Pikachu VMAX", "number": "188", "game": "pokemon"},
     "Rayquaza VMAX Alt Art PSA 10": {"name": "Rayquaza VMAX", "number": "218", "game": "pokemon"},
-    "API TEST": {"name": "Pikachu", "number": "1", "game": "pokemon"},
 }
 
 
@@ -71,7 +70,15 @@ def get_ebay_graded_price(card_info):
     card_name = card_info.get("name", "")
     card_key = card_info.get("number", card_name)
     try:
-        query = card_name.replace(" ", "+")
+        card_game = card_info.get("game", "")
+        grade_suffix = "PSA 10" if card_game == "pokemon" else "CGC 10"
+        card_number = card_info.get("number", "")
+        query_str = card_name
+        if card_number and card_number not in card_name:
+            query_str += " " + card_number
+        if grade_suffix not in card_name:
+            query_str += " " + grade_suffix
+        query = query_str.replace(" ", "+")
         ebay_url = (
             "https://www.ebay.com/sch/i.html"
             "?_nkw=" + query +
